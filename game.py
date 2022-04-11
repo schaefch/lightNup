@@ -8,6 +8,7 @@ from kivy.network.urlrequest import UrlRequest
 from kivy_garden.mapview import MapView, MapLayer, MarkerMapLayer, MapMarker, MarkerMapLayer
 from kivy.app import App
 from kivy.graphics import Color, Rectangle, Ellipse
+from kivy.uix.screenmanager import Screen, ScreenManager
 
 from pyproj import Transformer
 
@@ -218,7 +219,6 @@ class FeatureLayer(MarkerMapLayer):
 
         self.reposition()
 
-
             
 class LevelWidget(MapView):
     def __init__(self, **kwargs) -> None:
@@ -275,6 +275,11 @@ class LevelWidget(MapView):
 
         self.light_cone.visibility_radius_m = max(0, self.light_cone.visibility_radius_m-GameConfig.light_decay_per_walk)
 
+        if self.light_cone.visibility_radius_m <= 0:
+            print("over")
+            screenmanager = self.parent.parent
+            screenmanager.current = "gameover"
+
         x, y = pos
 
         px, py = self.player.center
@@ -301,10 +306,3 @@ class LevelWidget(MapView):
 
         self.feature_layer.update_features_by_player()
 
-
-class MainApp(App):
-    def build(self):
-        widget = LevelWidget()
-        return widget
-
-MainApp().run()
