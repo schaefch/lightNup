@@ -8,7 +8,7 @@ from kivy.network.urlrequest import UrlRequest
 from kivy_garden.mapview import MapView, MapLayer, MarkerMapLayer, MapMarker, MarkerMapLayer
 from kivy.app import App
 from kivy.graphics import Color, Rectangle, Ellipse
-from kivy.uix.screenmanager import Screen, ScreenManager
+from kivy.uix.label import Label
 
 from pyproj import Transformer
 
@@ -89,6 +89,16 @@ class GameBox(MapLayer):
             # Right
             if _east > east:
                 Rectangle(pos=(ex, 0), size=(vx-ex, vy))
+
+
+class LevelIndicatorLayer(MapLayer):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.level_text = Label(text="Level x")
+        self.add_widget(self.level_text)
+
+    def set_level(self, level_num):
+        self.level_text.text = f"Level {level_num}"
 
 
 class SnappableMapMarker(MapMarker):
@@ -221,10 +231,10 @@ class FeatureLayer(MarkerMapLayer):
 
             
 class LevelWidget(MapView):
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, level, **kwargs) -> None:
         super().__init__(**kwargs)
 
-        self.level = 1
+        self.level = level
         self.game_center = GameConfig.game_centers[0]
         self.game_zoom = GameConfig.game_zoom
 
@@ -246,6 +256,10 @@ class LevelWidget(MapView):
         self.light_cone = LightCone()
         self.add_layer(self.light_cone)
 
+        self.level_indicator_layer = LevelIndicatorLayer()
+        self.add_layer(self.level_indicator_layer)
+        self.level_indicator_layer.set_level(self.level)
+
         self.reseed_features(initial=True)
 
         self.feature_layer.update_features_by_player()         
@@ -259,8 +273,8 @@ class LevelWidget(MapView):
         self.add_layer(self.feature_layer, mode="window")
 
     def level_up(self):
-        print("Level Up!")
-        self.level += 1
+        screenmanager = self.parent.parent
+        screenmanager.current = "levelup"
 
     def on_touch_up(self, touch):
         return True
@@ -276,7 +290,6 @@ class LevelWidget(MapView):
         self.light_cone.visibility_radius_m = max(0, self.light_cone.visibility_radius_m-GameConfig.light_decay_per_walk)
 
         if self.light_cone.visibility_radius_m <= 0:
-            print("over")
             screenmanager = self.parent.parent
             screenmanager.current = "gameover"
 
