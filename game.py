@@ -1,12 +1,11 @@
 import math
-from pyexpat import features
 import random
 
 from kivy.app import App
 
 from kivy.network.urlrequest import UrlRequest
 
-from kivy_garden.mapview import MapView, MapLayer, MarkerMapLayer, MapMarker, MarkerMapLayer, MapSource
+from kivy_garden.mapview import MapView, MapLayer, MarkerMapLayer, MapMarker, MarkerMapLayer
 from kivy.app import App
 from kivy.graphics import Color, Rectangle, Ellipse
 
