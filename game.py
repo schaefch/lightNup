@@ -1,4 +1,5 @@
 import math
+from pyexpat import features
 import random
 
 from kivy.app import App
@@ -11,15 +12,32 @@ from kivy.graphics import Color, Rectangle, Ellipse
 
 from pyproj import Transformer
 
+def get_transformer_GPS2XY():
+    return Transformer.from_crs("epsg:4326", "epsg:3857")
 
 def convert_projection(center, delta, factor):
-    transformerGPS2XY = Transformer.from_crs("epsg:4326", "epsg:3857")
+    transformerGPS2XY = get_transformer_GPS2XY()
     transformerXY2GPS = Transformer.from_crs("epsg:3857", "epsg:4326")
     lat, lon = center
     x, y = transformerGPS2XY.transform(lon, lat)
     dx, dy = delta
 
     return transformerXY2GPS.transform(x + factor * dx, y + factor * dy)
+
+
+class GameConfig:
+    osrm_url="http://lightnup.schaefer-christian.de:5000/nearest/v1/foot"
+    player_file="player.png"
+    light_file="light.png"
+    treasure_file="treasure.png"
+    collect_radius_m=15
+    visibility_radius_m=50
+    game_centers = [(9.03, 48.40),]
+    game_zoom = 17
+    lightnup = 20
+    light_decay_per_walk = 1
+    player_step_size_m = 20
+    game_window = (500,500)
 
 
 class GameBox(MapLayer):
@@ -78,8 +96,8 @@ class SnappableMapMarker(MapMarker):
         super().__init__(**kwargs)
         self.snap_request()
 
-    def snap_request(self, url="http://lightnup.schaefer-christian.de:5000/nearest/v1/foot"):
-        request_url = f"{url}/{self.lon},{self.lat}"
+    def snap_request(self):
+        request_url = f"{GameConfig.osrm_url}/{self.lon},{self.lat}"
         _ = UrlRequest(url=request_url, on_success=self.snap)
 
     def snap(self, req, result):
@@ -92,16 +110,39 @@ class SnappableMapMarker(MapMarker):
 class ImagePlayer(SnappableMapMarker): # careful here!
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.source = "player.png"
+        self.source = GameConfig.player_file
+        self.width = 20
+        self.anchor_x, self.anchor_y = (0.5, 0.5)
+
+
+class ImageTreasure(SnappableMapMarker):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.source = GameConfig.treasure_file
         self.width = 20
         self.anchor_x, self.anchor_y = (0.5, 0.5)
 
     
 class LightCone(MarkerMapLayer):
-    def __init__(self, collect_radius_m=30, visiblity_radius_m=50, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.collect_radius_m = collect_radius_m
-        self.visibility_radius_m = visiblity_radius_m
+        self.collect_radius_m = GameConfig.collect_radius_m
+        self.visibility_radius_m = GameConfig.visibility_radius_m
+
+    def get_distance_to_object(self, obj):
+        lon, lat = self.parent.player.lon, self.parent.player.lat
+        transformer = get_transformer_GPS2XY()
+        pos_player = transformer.transform(lon, lat)
+        pos_obj = transformer.transform(obj.lon, obj.lat)
+        return math.dist(pos_player, pos_obj)
+
+    def is_within_collect(self, object):
+        dist = self.get_distance_to_object(object)
+        return dist <= self.collect_radius_m
+
+    def is_within_visibility(self, object):
+        dist = self.get_distance_to_object(object)
+        return dist <= self.visibility_radius_m
 
     def reposition(self):
         self.canvas.clear()
@@ -121,8 +162,7 @@ class LightCone(MarkerMapLayer):
         vex, vny = mapview.get_window_xy_from(ve, vn, zoom=mapview.zoom)
 
         with self.canvas:
-            # Add a red color
-            Color(0, 0, 1., 0.25)
+            Color(0, 0, 1, 0.25)
             
             Ellipse(pos=(cwx,csy), size=(cex-cwx, cny-csy))
 
@@ -132,7 +172,7 @@ class LightCone(MarkerMapLayer):
 class ImageLight(SnappableMapMarker):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.source = "light.png"
+        self.source = GameConfig.light_file
         self.width = 50
         self.anchor_x, self.anchor_y = (0.5, 0.5)
         
@@ -143,14 +183,42 @@ class FeatureLayer(MarkerMapLayer):
 
         self.features = list()
 
-        for _ in range(num_items):
+        for i in range(num_items+1):
             dx, dy = size_m
             dx *= 0.5-random.random()
             dy *= 0.5-random.random()
-            lat, lon = convert_projection(center=center, delta=(dx,dy), factor=1.0)
-            feature = ImageLight(lon=lon, lat=lat)
+            lat, lon = convert_projection(center=center, delta=(dx,dy), factor=1)
+            if i == 0:
+                feature = ImageTreasure(lon=lon, lat=lat)
+            else:
+                feature = ImageLight(lon=lon, lat=lat)
             self.features += [feature]
             self.add_widget(feature)
+
+    def update_features_by_player(self):
+        light_cone = self.parent.light_cone
+
+        new_features = list()
+
+        for feature in self.features:
+            if light_cone.is_within_collect(feature):
+                if isinstance(feature, ImageTreasure):
+                    self.parent.level_up()
+                elif isinstance(feature, ImageLight):
+                    light_cone.visibility_radius_m += GameConfig.lightnup
+                    light_cone.reposition()
+                self.remove_widget(feature)
+            else:
+                new_features += [feature]
+                if light_cone.is_within_visibility(feature):
+                    feature.opacity = 1
+                else:
+                    feature.opacity = 0
+
+        self.features = new_features
+
+        self.reposition()
+
 
             
 class LevelWidget(MapView):
@@ -158,14 +226,14 @@ class LevelWidget(MapView):
         super().__init__(**kwargs)
 
         self.level = 1
-        self.game_center = (9.03, 48.40)
-        self.game_zoom = 17
+        self.game_center = GameConfig.game_centers[0]
+        self.game_zoom = GameConfig.game_zoom
 
-        self.player_step_size_m = 20
+        self.player_step_size_m = GameConfig.player_step_size_m
 
         self.lon, self.lat = self.game_center
 
-        self.size_m = (500, 500)
+        self.size_m = GameConfig.game_window
         self.zoom = self.game_zoom
 
         self.feature_layer = None
@@ -179,7 +247,9 @@ class LevelWidget(MapView):
         self.light_cone = LightCone()
         self.add_layer(self.light_cone)
 
-        self.reseed_features(initial=True)             
+        self.reseed_features(initial=True)
+
+        self.feature_layer.update_features_by_player()         
 
     def reseed_features(self, num_features=10, initial=False):
         if not initial:
@@ -190,8 +260,8 @@ class LevelWidget(MapView):
         self.add_layer(self.feature_layer, mode="window")
 
     def level_up(self):
+        print("Level Up!")
         self.level += 1
-        self.reseed_features()
 
     def on_touch_up(self, touch):
         return True
@@ -203,6 +273,9 @@ class LevelWidget(MapView):
         return True
 
     def walk(self, pos):
+
+        self.light_cone.visibility_radius_m = max(0, self.light_cone.visibility_radius_m-GameConfig.light_decay_per_walk)
+
         x, y = pos
 
         px, py = self.player.center
@@ -210,7 +283,7 @@ class LevelWidget(MapView):
         dx = x - px
         dy = y - py
 
-        dist = math.sqrt(dx**2 + dy**2) + 0.001
+        dist = math.sqrt(dx**2 + dy**2) + 0.001  # We dont want to divide by zero
 
         dx /= dist
         dy /= dist
@@ -226,6 +299,8 @@ class LevelWidget(MapView):
 
         self._default_marker_layer.reposition()
         self.light_cone.reposition()
+
+        self.feature_layer.update_features_by_player()
 
 
 class MainApp(App):
