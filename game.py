@@ -1,8 +1,6 @@
 import math
 import random
 
-from kivy.app import App
-
 from kivy.network.urlrequest import UrlRequest
 
 from kivy_garden.mapview import MapView, MapLayer, MarkerMapLayer, MapMarker, MarkerMapLayer
@@ -32,7 +30,14 @@ class GameConfig:
     treasure_file="treasure.png"
     collect_radius_m=15
     visibility_radius_m=50
-    game_centers = [(9.03, 48.40),]
+    game_centers = [((9.049920114481143, 48.52176525143559),   "Tübingen Altstadt"),
+                    ((9.070180932820524, 48.53552026591366),   "Tübingen Sand"),
+                    ((9.201111065692809, 48.489720578927034),  "Reutlingen"),
+                    ((9.171063981403126, 48.77749943641017),   "Stuttgart"),
+                    ((9.222999278385494, 49.13814987983723),   "Heilbronn"),
+                    ((9.192824397901727, 47.67692492820826),   "Konstanz"),
+                    ((9.23219618515996, 48.09718749665937),    "Sigmaringen"),
+                    ((9.03, 48.40),                            "Mössingen"), ]
     game_zoom = 18
     lightnup = 20
     light_decay_per_walk = 1
@@ -94,22 +99,28 @@ class GameBox(MapLayer):
 class LevelIndicatorLayer(MapLayer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.level_text = Label(text="Level x")
+        self.level_text = Label()
         self.level_text.font_size = 30
+        self.level_text.halign = "left"
+        self.level_text.pos = (200, 100)
         self.add_widget(self.level_text)
 
-    def set_level(self, level_num):
-        self.level_text.text = f"Level {level_num}"
+    def set_level(self, level_num, location):
+        self.level_text.text = f"Level {level_num}\n{location}"
 
 
 class SnappableMapMarker(MapMarker):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.request = None
         self.snap_request()
 
     def snap_request(self):
+        if self.request is not None:
+            self.request.cancel()
         request_url = f"{GameConfig.osrm_url}/{self.lon},{self.lat}"
-        _ = UrlRequest(url=request_url, on_success=self.snap)
+        self.request = UrlRequest(url=request_url, on_success=self.snap)
+
 
     def snap(self, req, result):
         if result["code"] == "Ok":
@@ -242,7 +253,10 @@ class LevelWidget(MapView):
         super().__init__(**kwargs)
 
         self.level = level
-        self.game_center = GameConfig.game_centers[0]
+
+        id = (self.level - 1) % len(GameConfig.game_centers)
+
+        self.game_center, self.location_name = GameConfig.game_centers[id]
         self.game_zoom = GameConfig.game_zoom
 
         self.player_step_size_m = GameConfig.player_step_size_m
@@ -265,7 +279,7 @@ class LevelWidget(MapView):
 
         self.level_indicator_layer = LevelIndicatorLayer()
         self.add_layer(self.level_indicator_layer)
-        self.level_indicator_layer.set_level(self.level)
+        self.level_indicator_layer.set_level(self.level, self.location_name)
 
         self.reseed_features(initial=True)
 
