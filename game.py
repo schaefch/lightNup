@@ -33,7 +33,7 @@ class GameConfig:
     collect_radius_m=15
     visibility_radius_m=50
     game_centers = [(9.03, 48.40),]
-    game_zoom = 17
+    game_zoom = 18
     lightnup = 20
     light_decay_per_walk = 1
     player_step_size_m = 20
@@ -72,7 +72,7 @@ class GameBox(MapLayer):
 
         with self.canvas:
             # Add a red color
-            Color(1., 0, 0, 0.5)
+            Color(0, 0, 0, 0.7)
             
             # Lower
             if _south < south:
@@ -95,6 +95,7 @@ class LevelIndicatorLayer(MapLayer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.level_text = Label(text="Level x")
+        self.level_text.font_size = 30
         self.add_widget(self.level_text)
 
     def set_level(self, level_num):
@@ -114,7 +115,8 @@ class SnappableMapMarker(MapMarker):
         if result["code"] == "Ok":
             location = result["waypoints"][0]["location"]
             self.lon, self.lat = location
-            self.parent.reposition()
+            if self.parent is not None:
+                self.parent.reposition()
 
 
 class ImagePlayer(SnappableMapMarker): # careful here!
@@ -123,6 +125,11 @@ class ImagePlayer(SnappableMapMarker): # careful here!
         self.source = GameConfig.player_file
         self.width = 20
         self.anchor_x, self.anchor_y = (0.5, 0.5)
+
+    def snap(self, req, result):
+        result = super().snap(req, result)
+        self.parent.parent.light_cone.reposition()
+        return result
 
 
 class ImageTreasure(SnappableMapMarker):
@@ -172,7 +179,7 @@ class LightCone(MarkerMapLayer):
         vex, vny = mapview.get_window_xy_from(ve, vn, zoom=mapview.zoom)
 
         with self.canvas:
-            Color(0, 0, 1, 0.25)
+            Color(1, 1, 0, 0.25)
             
             Ellipse(pos=(cwx,csy), size=(cex-cwx, cny-csy))
 
