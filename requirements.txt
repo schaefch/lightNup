@@ -1,0 +1,12 @@
+certifi==2021.10.8
+charset-normalizer==2.0.12
+docutils==0.18.1
+idna==3.3
+Kivy==2.1.0
+Kivy-Garden==0.1.5
+kivy-garden.mapview==1.0.5
+mapview==1.0.5
+Pygments==2.11.2
+pyproj==3.3.0
+requests==2.27.1
+urllib3==1.26.9
